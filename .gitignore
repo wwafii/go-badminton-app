@@ -1,0 +1,21 @@
+# IDEs and Editors
+.idea/
+.vscode/
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.a
+
+# Test data (if any)
+test_data/
+
+# Dependency directories (Golang specific)
+# vendor/ # Uncomment if you use the vendor directory (old style)
+
+# Critical: ENVIRONMENT VARIABLES & SECRETS
+# JANGAN PERNAH MENGUNGGAH FILE INI KE GITHUB
+.env
