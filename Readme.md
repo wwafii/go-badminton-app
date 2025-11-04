@@ -62,7 +62,7 @@ SERVER_PORT=8080
 SERVER_URL=http://localhost:8080
 
 # Midtrans Sandbox Credentials (HARUS DIGANTI)
-MIDTRANS_SERVER_KEY=SB-Mid-server-YOUR_MIDTRANS_SERVER_KEY 
+MIDTRANS_SERVER_KEY=SB-******
 MIDTRANS_SNAP_URL=[https://app.sandbox.midtrans.com/snap/v1/transactions](https://app.sandbox.midtrans.com/snap/v1/transactions)
 
 # 1. Initialize Go module dependencies
