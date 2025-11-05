@@ -3,33 +3,34 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
 
 
 var (
-	MIDTRANS_SERVER_KEY string
-	MIDTRANS_SNAP_URL   string
 	SERVER_PORT         string
 	SERVER_URL          string
-	PRICE_PER_SLOT      int = 50000 
+	PRICE_PER_SLOT      int 
 )
 
-
 func InitConfig() {
-	
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file. Pastikan file .env ada di root folder.")
+		log.Fatal("Error loading .env file. Pastikan file .env ada.")
 	}
 
-
-	MIDTRANS_SERVER_KEY = os.Getenv("MIDTRANS_SERVER_KEY")
-	MIDTRANS_SNAP_URL = os.Getenv("MIDTRANS_SNAP_URL")
 	SERVER_PORT = os.Getenv("SERVER_PORT")
 	SERVER_URL = os.Getenv("SERVER_URL")
-
-	if MIDTRANS_SERVER_KEY == "" || SERVER_PORT == "" {
-		log.Fatal("SERVER_PORT atau MIDTRANS_SERVER_KEY tidak ditemukan di .env")
+	
+	priceStr := os.Getenv("PRICE_PER_SLOT")
+	if price, err := strconv.Atoi(priceStr); err == nil {
+		PRICE_PER_SLOT = price
+	} else {
+		PRICE_PER_SLOT = 50000 
+	}
+	
+	if SERVER_PORT == "" {
+		log.Fatal("SERVER_PORT tidak ditemukan di .env")
 	}
 }

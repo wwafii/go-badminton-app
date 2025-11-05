@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"bytes"
-	"io"
 
 	"go-badminton-app/models"
 	"go-badminton-app/config"
@@ -34,7 +32,6 @@ var (
 
 
 func isCourtBooked(date string, timeslotID int, courtID int) bool {
-	
 	for _, res := range Reservations {
 		if res.ReservationDate == date && res.TimeslotID == timeslotID && res.CourtID == courtID && res.Status != "Cancelled" {
 			return true
@@ -43,47 +40,7 @@ func isCourtBooked(date string, timeslotID int, courtID int) bool {
 	return false
 }
 
-func createMidtransTransaction(res models.Reservation) (string, error) {
-	
-	payload := map[string]interface{}{
-		"transaction_details": map[string]interface{}{
-			"order_id": res.MidtransOrderID,
-			"gross_amount": res.Amount,
-		},
-		"customer_details": map[string]string{
-			"first_name": res.CustomerName,
-			"email": "customer@example.com", 
-			"phone": "081111111111",
-		},
-		"callbacks": map[string]string{
-			"notification": config.SERVER_URL + "/api/payment-callback", 
-		},
-	}
-	
-	
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("gagal marshall payload: %w", err)
-	}
-
-	
-	_, err = http.NewRequest(http.MethodPost, config.MIDTRANS_SNAP_URL, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return "", fmt.Errorf("gagal membuat request Midtrans: %w", err)
-	}
-	
-	
-	if res.Amount <= 0 {
-		return "", fmt.Errorf("jumlah pembayaran tidak valid")
-	}
-	mockToken := fmt.Sprintf("mock-snap-token-%s", res.MidtransOrderID)
-
-	return mockToken, nil 
-}
-
-
-
-
+// GetDatesHandler (Logika tetap sama)
 func GetDatesHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	
@@ -133,6 +90,7 @@ func AvailableTimeslotsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(availableSlots)
 }
 
+// AvailableCourtsHandler (Logika tetap sama)
 func AvailableCourtsHandler(w http.ResponseWriter, r *http.Request) {
 	dateStr := r.URL.Query().Get("date")
 	timeslotIDStr := r.URL.Query().Get("timeslot_id")
@@ -162,6 +120,7 @@ func AvailableCourtsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(availableCourts)
 }
 
+// CreateReservationHandler (Reservasi dibuat dengan status Pending)
 func CreateReservationHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CourtID         int    `json:"court_id"`
@@ -200,90 +159,47 @@ func CreateReservationHandler(w http.ResponseWriter, r *http.Request) {
 		TimeslotID: req.TimeslotID,
 		ReservationDate: req.ReservationDate,
 		CustomerName: req.CustomerName,
-		Amount: config.PRICE_PER_SLOT, 
+		Amount: config.PRICE_PER_SLOT,
 		Status: "Pending", 
-		MidtransOrderID: fmt.Sprintf("DIRO-%d-%d", nextResID, time.Now().Unix()),
 	}
 	
-	
-	snapToken, err := createMidtransTransaction(newReservation)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Gagal memproses pembayaran: %v", err), http.StatusInternalServerError)
-		return
-	}
-	
-	
-	newReservation.MidtransToken = snapToken
 	Reservations[nextResID] = newReservation
 	nextResID++
 
 	
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "Reservasi berhasil dibuat. Arahkan ke pembayaran.",
+		"message": "Reservasi berhasil dibuat. Menunggu konfirmasi pembayaran.",
 		"reservation_id": newReservation.ID,
 		"amount": newReservation.Amount,
-		"snap_token": snapToken, 
 	})
 }
 
-func PaymentCallbackHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-    
-	r.Body = http.MaxBytesReader(w, r.Body, 1048576) 
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
-		return
+func PaymentConfirmHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ReservationID int `json:"reservation_id"`
 	}
 	
-	var notificationPayload map[string]interface{}
-	if err := json.Unmarshal(body, &notificationPayload); err != nil {
-		http.Error(w, "Invalid notification payload JSON", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
 		return
 	}
-	
-	orderID, _ := notificationPayload["order_id"].(string)
-	transactionStatus, _ := notificationPayload["transaction_status"].(string)
-
 	
 	mu.Lock()
 	defer mu.Unlock()
-	
-	var resIDToUpdate int
-	resFound := false
-	for id, res := range Reservations {
-		if res.MidtransOrderID == orderID {
-			resIDToUpdate = id
-			resFound = true
-			break
+
+	if res, ok := Reservations[req.ReservationID]; ok {
+		if res.Status == "Pending" {
+			res.Status = "Confirmed" // KONFIRMASI BOOKING SLOT
+			Reservations[req.ReservationID] = res
+			fmt.Printf("Reservasi ID %d BERHASIL DIKONFIRMASI (Simulasi Paid).\n", req.ReservationID)
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"message": "Pembayaran sukses. Reservasi Confirmed."})
+			return
 		}
-	}
-	
-	if !resFound {
-		http.Error(w, "Order ID not found in database", http.StatusNotFound)
+		http.Error(w, "Reservasi sudah dikonfirmasi atau dibatalkan.", http.StatusConflict)
 		return
 	}
-	
-	res := Reservations[resIDToUpdate]
-	
-	
-	if transactionStatus == "capture" || transactionStatus == "settlement" {
-		if res.Status != "Confirmed" {
-			 res.Status = "Confirmed" 
-			 Reservations[resIDToUpdate] = res
-			 fmt.Printf("Reservasi %s BERHASIL DIKONFIRMASI (Paid) via Midtrans.\n", orderID)
-		}
-	} else if transactionStatus == "deny" || transactionStatus == "cancel" || transactionStatus == "expire" {
-		res.Status = "Cancelled"
-		Reservations[resIDToUpdate] = res
-		fmt.Printf("Reservasi %s DIBATALKAN/KADALUARSA.\n", orderID)
-	}
-	
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Midtrans notification handled successfully"})
+	http.Error(w, "Reservasi tidak ditemukan.", http.StatusNotFound)
 }
